@@ -2,9 +2,12 @@ opencv-python
 langchain
 langchain-openai
 langchain_google_genai
+langchain_groq
 langchain-community
 python-dotenv
 pyaudio
 soundfile
+dashscope
+funasr>=1.1.3
 SpeechRecognition
 git+https://github.com/openai/whisper.git
