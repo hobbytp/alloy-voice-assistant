@@ -8,6 +8,7 @@ python-dotenv
 pyaudio
 soundfile
 dashscope
+torchaudio
 funasr>=1.1.3
 SpeechRecognition
 git+https://github.com/openai/whisper.git

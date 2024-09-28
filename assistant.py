@@ -1,4 +1,5 @@
 import base64
+import os
 from threading import Lock, Thread
 
 import cv2
@@ -12,8 +13,14 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from pyaudio import PyAudio, paInt16
 from speech_recognition import Microphone, Recognizer, UnknownValueError
+
+import pyttsx3
+import dashscope
+from dashscope.audio.tts_v2 import *
+
 
 load_dotenv()
 
@@ -66,6 +73,7 @@ class WebcamStream:
 class Assistant:
     def __init__(self, model):
         self.chain = self._create_inference_chain(model)
+        self.engine = pyttsx3.init()
 
     def answer(self, prompt, image):
         if not prompt:
@@ -76,14 +84,33 @@ class Assistant:
         response = self.chain.invoke(
             {"prompt": prompt, "image_base64": image.decode()},
             config={"configurable": {"session_id": "unused"}},
-        ).strip()
+        )
+        if response is None:
+            print("No response!!!")
+            return
+        response = response.strip()
 
         print("Response:", response)
 
         if response:
             self._tts(response)
 
+    def _tts_new(self, response):
+        dashscope.api_key = os.environ["DASHSCOPE_API_KEY"]
+        model = "cosyvoice-v1"
+        voice = "longxiaochun"
+
+        synthesizer = SpeechSynthesizer(model=model, voice=voice)
+        audio = synthesizer.call(response)
+        print('requestId: ', synthesizer.get_last_request_id())
+        # with open('output.mp3', 'wb') as f:
+        #    f.write(audio)
+
     def _tts(self, response):
+        self.engine.say(response)
+        self.engine.runAndWait()    
+        
+        '''
         player = PyAudio().open(format=paInt16, channels=1, rate=24000, output=True)
 
         with openai.audio.speech.with_streaming_response.create(
@@ -94,6 +121,7 @@ class Assistant:
         ) as stream:
             for chunk in stream.iter_bytes(chunk_size=1024):
                 player.write(chunk)
+        '''
 
     def _create_inference_chain(self, model):
         SYSTEM_PROMPT = """
@@ -134,9 +162,35 @@ class Assistant:
         )
 
 
-webcam_stream = WebcamStream().start()
 
-model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
+
+'''
+model_name = "mixtral-8x7b-32768"
+groq_api_key = os.environ.get(    "GROQ_API_KEY")
+print("groq_api_key: ", groq_api_key)
+model = ChatGroq(model_name=model_name, groq_api_key=groq_api_key, max_tokens=3072, temperature=0.7)
+'''
+
+
+model = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash-latest",
+        temperature=0,
+        max_tokens=None,
+        timeout=None,
+        max_retries=0,)
+
+messages = [
+    (
+        "system",
+        "You are a helpful assistant that translates English to French. Translate the user sentence.",
+    ),
+    ("human", "I love programming."),
+]
+
+ai_msg = model.invoke(messages)
+print(ai_msg.content)
+
+
 
 # You can use OpenAI's GPT-4o model instead of Gemini Flash
 # by uncommenting the following line:
@@ -144,10 +198,14 @@ model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
 
 assistant = Assistant(model)
 
+webcam_stream = WebcamStream().start()
 
 def audio_callback(recognizer, audio):
     try:
-        prompt = recognizer.recognize_whisper(audio, model="base", language="english")
+        # prompt = recognizer.recognize_whisper(
+        #    audio, model="base", language="english")
+        prompt = recognizer.recognize_whisper(
+            audio, model="base", language="english")
         assistant.answer(prompt, webcam_stream.read(encode=True))
 
     except UnknownValueError:
